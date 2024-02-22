@@ -1,0 +1,171 @@
+# Load necessary libraries
+library(tidyverse)
+library(forecast)
+library(tseries)
+
+# Load the dataset
+Life_data_Exp <- read.csv("Life Expectancy Data.csv")
+
+# Convert to data frame and check types
+Life_data_Exp <- as.data.frame(Life_data_Exp)
+print(class(Life_data_Exp))
+print(lapply(Life_data_Exp, class))
+
+# Identify numeric columns
+Num_Life <- unlist(lapply(Life_data_Exp, class)) == "numeric"
+
+# Check correlation between numeric variables
+print(cor(Life_data_Exp[, Num_Life], use = "complete.obs"))
+
+# Omitting NA values
+Life_data_Exp <- Life_data_Exp %>% drop_na()
+
+# Checking dataframe structure and summary
+print(str(Life_data_Exp))
+print(summary(Life_data_Exp))
+
+# Various analyses and correlations (your existing code)
+#correlation between life expectancy and adult mortality
+cor(Life_data_Exp$Life.expectancy,Life_data_Exp$Adult.Mortality)
+cor(Life_data_Exp$Life.expectancy,Life_data_Exp$infant.deaths)
+cor(Life_data_Exp$Life.expectancy,Life_data_Exp$Alcohol)
+cor(Life_data_Exp$Life.expectancy,Life_data_Exp$Schooling)
+cor(Life_data_Exp$Life.expectancy,Life_data_Exp$Population)
+cor(Life_data_Exp$Life.expectancy,Life_data_Exp$Hepatitis.B)
+cor(Life_data_Exp$Life.expectancy,Life_data_Exp$Polio)
+cor(Life_data_Exp$Life.expectancy,Life_data_Exp$Diphtheria)
+cor(Life_data_Exp$Life.expectancy,Life_data_Exp$percentage.expenditure)
+#plotting correlation 
+plot(Life_data_Exp[,Num_Life])
+plot(Life_data_Exp$Life.expectancy,Life_data_Exp$Adult.Mortality)
+plot(Life_data_Exp$Life.expectancy, Life_data_Exp$Schooling)
+plot(Life_data_Exp$Life.expectancy, Life_data_Exp$infant.deaths)
+plot(Life_data_Exp$Life.expectancy, Life_data_Exp$Income.composition.of.resources)
+plot(Life_data_Exp$Life.expectancy, Life_data_Exp$Alcohol)
+plot(Life_data_Exp$Life.expectancy, Life_data_Exp$percentage.expenditure)
+#regression of Life expectancy on Income composition of resources
+fit_life <- lm(Life.expectancy ~ Income.composition.of.resources , data=Life_data_Exp)
+fit_life
+#getting summary statistics
+life_sum<-summary(fit_life)
+life_sum$coefficients
+pvalue<- life_sum$coefficients[,4]
+#comparing p values 
+pvalue<=0.05
+# R^2 of fit_life
+fitr2<-life_sum$r.squared
+fitr2
+
+# Time Series Analysis for Life Expectancy
+# Aggregate life expectancy by year
+Life_data_TS <- Life_data_Exp %>% 
+  group_by(Year) %>% 
+  summarise(Avg_Life_Expectancy = mean(Life.expectancy, na.rm = TRUE))
+
+# Creating a time series object
+life_ts <- ts(Life_data_TS$Avg_Life_Expectancy, start = min(Life_data_TS$Year), frequency = 1)
+
+# Checking for stationarity
+adf_test_result <- adf.test(life_ts)
+print(adf_test_result)
+
+# Differencing the series if not stationary
+if (adf_test_result$p.value > 0.05) {
+  life_ts <- diff(life_ts, differences = 1)
+}
+
+# Fitting an ARIMA model
+fit_arima <- auto.arima(life_ts)
+
+# Model diagnostics
+print(tsdiag(fit_arima))
+
+# Forecasting future trends
+future_trends <- forecast(fit_arima, h = 10)
+plot(future_trends)
+
+# Interpret the forecasted values and confidence intervals
+# Print forecasted values and confidence intervals
+print(future_trends)
+
+# Plot the forecast with confidence intervals
+plot(future_trends)
+legend("topleft", legend = c("Forecast", "80% CI", "95% CI"), 
+       col = c("blue", "green", "red"), lty = 1:2, cex = 0.8)
+
+# Interpretation
+# The plot shows the forecasted life expectancy values along with the 80% and 95% confidence intervals.
+# The blue line represents the forecasted life expectancy.
+# The green and red shaded areas represent the 80% and 95% confidence intervals, respectively.
+# Narrower intervals indicate more confidence in the forecasted values.
+
+# Additional detailed interpretation of forecast
+print(summary(future_trends))
+
+# Calculating AIC and R-squared for the life expectancy and income composition model
+fitaic <- AIC(fit_life)
+fitr2 <- summary(fit_life)$r.squared
+
+# Print AIC and R-squared
+print(paste("AIC:", fitaic))
+print(paste("R-squared:", fitr2))
+
+# Regression of life expectancy on Schooling
+fit_schooling <- lm(Life.expectancy ~ Schooling, data=Life_data_Exp)
+summary_fit_schooling <- summary(fit_schooling)
+
+# Print summary statistics for the schooling model
+print(summary_fit_schooling)
+
+# Compare models using AIC and R-squared
+aic_schooling <- AIC(fit_schooling)
+r2_schooling <- summary_fit_schooling$r.squared
+
+print(paste("AIC for Schooling Model:", aic_schooling))
+print(paste("R-squared for Schooling Model:", r2_schooling))
+
+# Residual Analysis for the Income Composition Model
+residuals_fit_life <- residuals(fit_life)
+fitted_values_fit_life <- fitted(fit_life)
+
+# Plotting residuals vs fitted values
+plot(fitted_values_fit_life, residuals_fit_life, xlab = "Fitted Values", ylab = "Residuals", main = "Residuals vs Fitted Values")
+abline(h = 0, col = "red")
+
+# Checking for normality of residuals
+hist(residuals_fit_life, main = "Histogram of Residuals", xlab = "Residuals", breaks = 30)
+qqnorm(residuals_fit_life)
+qqline(residuals_fit_life)
+
+# Checking for homoscedasticity
+plot(fitted_values_fit_life, residuals_fit_life^2, xlab = "Fitted Values", ylab = "Squared Residuals", main = "Homoscedasticity Check")
+abline(h = mean(residuals_fit_life^2), col = "red")
+
+# Full Model on Life Expectancy
+fit_full <- lm(Life.expectancy ~ ., data=Life_data_Exp)
+summary_full <- summary(fit_full)
+
+# Print summary of full model
+print(summary_full)
+
+# Stepwise Model Selection
+fit_stepwise <- step(fit_full, direction="both")
+summary_stepwise <- summary(fit_stepwise)
+
+# Print summary of stepwise model
+print(summary_stepwise)
+
+# AIC comparison among models
+aic_comparison <- c(AIC(fit_life), AIC(fit_schooling), AIC(fit_full), AIC(fit_stepwise))
+names(aic_comparison) <- c("Income Composition", "Schooling", "Full Model", "Stepwise Model")
+print(aic_comparison)
+
+library(stargazer)
+
+# Using stargazer to create a table of regression results
+stargazer(fit_life, fit_schooling, fit_full, fit_stepwise, type = "text",
+          title = "Regression Results", 
+          header = FALSE, 
+          model.names = FALSE,
+          digits = 2,
+          intercept.bottom = FALSE)
